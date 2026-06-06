@@ -1,0 +1,3758 @@
+================================================================
+  DEVARA KAADU — Sacred Grove Sentinel
+  Full Source Code Export
+  Generated: Fri May  8 06:55:06 AM UTC 2026
+================================================================
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/alert-new.tsx
+----------------------------------------------------------------
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { ArrowLeft, Camera, X, ImageIcon, Loader2 } from "lucide-react";
+import { Link } from "wouter";
+import { useCreateAlert, useListGroves, getListAlertsQueryKey } from "@workspace/api-client-react";
+import { useUpload } from "@workspace/object-storage-web";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+
+const formSchema = z.object({
+  groveId: z.string().optional(),
+  alertType: z.string().min(1, "Alert type is required"),
+  description: z.string().min(10, "Please provide a detailed description (at least 10 characters)"),
+  reportedBy: z.string().optional(),
+  location: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+const ALERT_TYPES = [
+  { value: "tree_cutting", label: "Tree Cutting" },
+  { value: "waste_dumping", label: "Waste Dumping" },
+  { value: "encroachment", label: "Encroachment" },
+  { value: "fire", label: "Fire" },
+  { value: "other", label: "Other" },
+];
+
+export default function AlertNew() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [uploadedImagePath, setUploadedImagePath] = useState<string | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+
+  const { data: groves } = useListGroves({});
+
+  const { uploadFile, isUploading, progress } = useUpload({
+    onSuccess: (response) => {
+      setUploadedImagePath(response.objectPath);
+      toast({ title: "Photo uploaded", description: "Your photo has been attached to this alert." });
+    },
+    onError: (err) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const createAlert = useCreateAlert({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+        toast({ title: "Alert reported", description: "Thank you for helping protect our sacred groves." });
+        setLocation("/alerts");
+      },
+      onError: () => {
+        toast({ title: "Failed to submit alert", variant: "destructive" });
+      },
+    },
+  });
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      groveId: "",
+      alertType: "",
+      description: "",
+      reportedBy: "",
+      location: "",
+    },
+  });
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    setImagePreviewUrl(localUrl);
+    await uploadFile(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setUploadedImagePath(null);
+    setImagePreviewUrl(null);
+  };
+
+  const onSubmit = (values: FormValues) => {
+    const selectedGrove = groves?.find((g) => String(g.id) === values.groveId);
+    createAlert.mutate({
+      data: {
+        groveId: values.groveId ? parseInt(values.groveId, 10) : null,
+        groveName: selectedGrove?.name ?? null,
+        alertType: values.alertType,
+        description: values.description,
+        reportedBy: values.reportedBy || null,
+        location: values.location || null,
+        imageUrl: uploadedImagePath ? `/api/storage${uploadedImagePath}` : null,
+      },
+    });
+  };
+
+  return (
+    <div className="px-4 py-4 max-w-2xl mx-auto">
+      <div className="flex items-center gap-3 mb-5">
+        <Link href="/alerts" className="flex items-center justify-center w-8 h-8 rounded-full bg-muted hover:bg-muted/70 transition-colors">
+          <ArrowLeft className="h-4 w-4 text-foreground" />
+        </Link>
+        <div>
+          <h1 className="text-lg font-serif font-bold text-foreground leading-tight">Report Alert</h1>
+          <p className="text-[11px] text-muted-foreground">Flag a conservation threat</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-serif text-xl">Alert Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="alertType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type of Threat</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-alert-type">
+                          <SelectValue placeholder="Select threat type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {ALERT_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="groveId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sacred Grove (optional)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-grove">
+                          <SelectValue placeholder="Select a grove if known" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="unknown">Unknown / Not listed</SelectItem>
+                        {groves?.map((g) => (
+                          <SelectItem key={g.id} value={String(g.id)}>{g.name} — {g.district}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        data-testid="input-alert-description"
+                        placeholder="Describe what you observed. Include as much detail as possible — what happened, when, and the extent of damage."
+                        className="min-h-[120px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Photo Upload */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">
+                  Attach Photo (optional)
+                </label>
+                {imagePreviewUrl ? (
+                  <div className="relative rounded-lg overflow-hidden border bg-muted">
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Alert photo preview"
+                      className="w-full max-h-56 object-cover"
+                    />
+                    {isUploading && (
+                      <div className="absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        <span className="text-sm font-medium">{progress}%</span>
+                      </div>
+                    )}
+                    {!isUploading && (
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        className="absolute top-2 right-2 bg-background/80 backdrop-blur rounded-full p-1 hover:bg-background transition-colors"
+                        aria-label="Remove photo"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    {uploadedImagePath && !isUploading && (
+                      <div className="absolute bottom-2 left-2 bg-green-600/90 text-white text-xs px-2 py-1 rounded-full">
+                        Uploaded
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="photo-upload"
+                    className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                  >
+                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10">
+                      <Camera className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-foreground">Click to add a photo</p>
+                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG or WEBP up to 10MB</p>
+                    </div>
+                    <input
+                      id="photo-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={handlePhotoSelect}
+                      data-testid="input-alert-photo"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Location (optional)</FormLabel>
+                    <FormControl>
+                      <Input data-testid="input-alert-location" placeholder="e.g. Northern edge of grove, near the stream" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="reportedBy"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Name (optional)</FormLabel>
+                    <FormControl>
+                      <Input data-testid="input-alert-reporter" placeholder="Your name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="submit"
+                  data-testid="button-submit-alert"
+                  disabled={createAlert.isPending || isUploading}
+                  className="flex-1"
+                >
+                  {createAlert.isPending ? "Submitting..." : isUploading ? "Uploading photo..." : "Submit Alert"}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/alerts">Cancel</Link>
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/alerts.tsx
+----------------------------------------------------------------
+import { Link } from "wouter";
+import { useState } from "react";
+import { AlertTriangle, Plus, ShieldCheck, ChevronRight } from "lucide-react";
+import { useListAlerts, useUpdateAlert, getListAlertsQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+
+const statusColor: Record<string, string> = {
+  reported: "bg-red-100 text-red-800",
+  investigating: "bg-amber-100 text-amber-800",
+  resolved: "bg-emerald-100 text-emerald-800",
+};
+
+const alertTypeLabels: Record<string, string> = {
+  tree_cutting: "Tree Cutting",
+  waste_dumping: "Waste Dumping",
+  encroachment: "Encroachment",
+  fire: "Fire",
+  other: "Other",
+};
+
+const STATUS_FILTERS = [
+  { value: "", label: "All" },
+  { value: "reported", label: "Reported" },
+  { value: "investigating", label: "Investigating" },
+  { value: "resolved", label: "Resolved" },
+];
+
+export default function Alerts() {
+  const [statusFilter, setStatusFilter] = useState("");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: alerts, isLoading } = useListAlerts({
+    status: statusFilter as "reported" | "investigating" | "resolved" | undefined || undefined,
+  });
+
+  const updateAlert = useUpdateAlert({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+        toast({ title: "Status updated" });
+      },
+    },
+  });
+
+  const handleStatusChange = (id: number, status: "reported" | "investigating" | "resolved") => {
+    updateAlert.mutate({ id, data: { status } });
+  };
+
+  return (
+    <div className="flex flex-col">
+      {/* Header */}
+      <div className="px-4 pt-5 pb-3 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-serif font-bold text-foreground">Conservation Alerts</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Track and respond to threats</p>
+        </div>
+        <Link
+          href="/alerts/new"
+          data-testid="button-report-alert"
+          className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-semibold px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors active:scale-95"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Report
+        </Link>
+      </div>
+
+      {/* Status filter pills */}
+      <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-none">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setStatusFilter(f.value)}
+            data-testid={f.value ? `filter-${f.value}` : "filter-all"}
+            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              statusFilter === f.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div className="px-4 space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-2xl bg-muted animate-pulse" />
+          ))
+        ) : alerts?.length === 0 ? (
+          <div className="flex flex-col items-center py-20 text-muted-foreground gap-3">
+            <ShieldCheck className="h-12 w-12 text-emerald-400" />
+            <p className="text-sm font-medium text-emerald-700">The groves are safe.</p>
+          </div>
+        ) : (
+          alerts?.map((alert) => (
+            <div
+              key={alert.id}
+              data-testid={`card-alert-${alert.id}`}
+              className="bg-card border border-border/60 rounded-2xl overflow-hidden"
+            >
+              <div className="flex items-center gap-3 px-4 pt-3.5 pb-2">
+                <div className="w-8 h-8 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {alertTypeLabels[alert.alertType] ?? alert.alertType}
+                  </p>
+                  {alert.groveName && (
+                    <p className="text-[10px] text-muted-foreground">{alert.groveName}</p>
+                  )}
+                </div>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0 ${statusColor[alert.status] ?? "bg-gray-100 text-gray-700"}`}>
+                  {alert.status}
+                </span>
+              </div>
+              <p className="px-4 pb-2 text-[11px] text-foreground/70 line-clamp-2 leading-relaxed">{alert.description}</p>
+              <div className="px-4 pb-3 flex items-center justify-between gap-2 border-t border-border/50 pt-2.5">
+                <p className="text-[10px] text-muted-foreground">
+                  {new Date(alert.createdAt).toLocaleDateString()}
+                  {alert.location && ` · ${alert.location}`}
+                </p>
+                <Select
+                  value={alert.status}
+                  onValueChange={(v) => handleStatusChange(alert.id, v as "reported" | "investigating" | "resolved")}
+                >
+                  <SelectTrigger data-testid={`select-alert-status-${alert.id}`} className="w-36 h-7 text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reported">Reported</SelectItem>
+                    <SelectItem value="investigating">Investigating</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/grove-detail.tsx
+----------------------------------------------------------------
+import { useRoute, Link } from "wouter";
+import { ArrowLeft, MapPin, TreePine, Leaf, BookOpen, AlertTriangle, ShieldCheck } from "lucide-react";
+import { useGetGrove, useListGroveSpecies, useListGroveLegends, useListGroveAlerts, getGetGroveQueryKey, getListGroveSpeciesQueryKey, getListGroveLegendsQueryKey, getListGroveAlertsQueryKey } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const statusColor: Record<string, string> = {
+  "Well-preserved": "bg-green-100 text-green-800",
+  "Threatened": "bg-amber-100 text-amber-800",
+  "Critical": "bg-red-100 text-red-800",
+};
+
+const speciesStatusColor: Record<string, string> = {
+  "Endangered": "bg-red-100 text-red-800",
+  "Vulnerable": "bg-amber-100 text-amber-800",
+  "Least Concern": "bg-green-100 text-green-800",
+};
+
+const alertStatusColor: Record<string, string> = {
+  "reported": "bg-red-100 text-red-800",
+  "investigating": "bg-amber-100 text-amber-800",
+  "resolved": "bg-green-100 text-green-800",
+};
+
+export default function GroveDetail() {
+  const [, params] = useRoute("/groves/:id");
+  const id = parseInt(params?.id ?? "0", 10);
+
+  const { data: grove, isLoading } = useGetGrove(id, { query: { enabled: !!id, queryKey: getGetGroveQueryKey(id) } });
+  const { data: species } = useListGroveSpecies(id, { query: { enabled: !!id, queryKey: getListGroveSpeciesQueryKey(id) } });
+  const { data: legends } = useListGroveLegends(id, { query: { enabled: !!id, queryKey: getListGroveLegendsQueryKey(id) } });
+  const { data: alerts } = useListGroveAlerts(id, { query: { enabled: !!id, queryKey: getListGroveAlertsQueryKey(id) } });
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-10">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-48 bg-muted rounded" />
+          <div className="h-64 bg-muted rounded-xl" />
+          <div className="h-6 w-2/3 bg-muted rounded" />
+          <div className="h-4 w-full bg-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!grove) {
+    return (
+      <div className="container mx-auto px-4 py-20 text-center">
+        <TreePine className="h-12 w-12 mx-auto mb-4 opacity-30" />
+        <p className="text-muted-foreground text-lg">Grove not found.</p>
+        <Button variant="link" asChild className="mt-4"><Link href="/groves">Back to directory</Link></Button>
+      </div>
+    );
+  }
+
+  const traditionalLegends = legends?.filter((l) => l.legendType === "traditional") ?? [];
+  const scientificLegends = legends?.filter((l) => l.legendType === "scientific") ?? [];
+
+  return (
+    <div className="container mx-auto px-4 py-10 max-w-4xl">
+      <Button variant="ghost" asChild className="mb-6 -ml-2">
+        <Link href="/groves" data-testid="link-back-to-groves">
+          <ArrowLeft className="h-4 w-4 mr-2" />Back to Groves
+        </Link>
+      </Button>
+
+      <div className="mb-8">
+        {grove.imageUrl && (
+          <div className="w-full h-64 rounded-xl overflow-hidden mb-6">
+            <img src={grove.imageUrl} alt={grove.name} className="object-cover w-full h-full" />
+          </div>
+        )}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-4xl font-serif font-bold mb-2" data-testid="text-grove-name">{grove.name}</h1>
+            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+              <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" />{grove.district}, {grove.state}</span>
+              {grove.area && <span className="flex items-center gap-1.5"><Leaf className="h-4 w-4" />{grove.area}</span>}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className="text-sm" variant="secondary">{grove.groveType}</Badge>
+            <span className={`px-3 py-1 text-sm font-medium rounded-full ${statusColor[grove.conservationStatus] ?? "bg-gray-100 text-gray-800"}`}>
+              {grove.conservationStatus}
+            </span>
+          </div>
+        </div>
+        {grove.deity && (
+          <p className="text-sm text-muted-foreground mb-4 italic">Presiding deity: {grove.deity}</p>
+        )}
+        <p className="text-foreground/80 leading-relaxed text-base">{grove.description}</p>
+      </div>
+
+      <Tabs defaultValue="legends" data-testid="tabs-grove-detail">
+        <TabsList className="mb-6">
+          <TabsTrigger value="legends" data-testid="tab-legends">
+            <BookOpen className="h-4 w-4 mr-2" />Myths & Legends
+          </TabsTrigger>
+          <TabsTrigger value="species" data-testid="tab-species">
+            <Leaf className="h-4 w-4 mr-2" />Species ({species?.length ?? 0})
+          </TabsTrigger>
+          <TabsTrigger value="alerts" data-testid="tab-alerts">
+            <AlertTriangle className="h-4 w-4 mr-2" />Alerts ({alerts?.length ?? 0})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="legends">
+          {legends?.length === 0 ? (
+            <p className="text-muted-foreground text-center py-10">No legends documented yet.</p>
+          ) : (
+            <div className="space-y-8">
+              {traditionalLegends.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-serif font-semibold mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />Traditional Beliefs
+                  </h3>
+                  <div className="space-y-4">
+                    {traditionalLegends.map((legend) => (
+                      <Card key={legend.id} data-testid={`card-legend-${legend.id}`} className="border-amber-200/60 bg-amber-50/30 dark:bg-amber-950/10">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="font-serif text-lg">{legend.title}</CardTitle>
+                          {legend.deity && <p className="text-xs text-muted-foreground">Deity: {legend.deity}</p>}
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm leading-relaxed text-foreground/80 italic">"{legend.content}"</p>
+                          {legend.source && <p className="text-xs text-muted-foreground mt-3">Source: {legend.source}</p>}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {scientificLegends.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-serif font-semibold mb-4 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-primary" />Scientific Facts
+                  </h3>
+                  <div className="space-y-4">
+                    {scientificLegends.map((legend) => (
+                      <Card key={legend.id} data-testid={`card-science-${legend.id}`} className="border-primary/20 bg-primary/5">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="font-serif text-lg">{legend.title}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm leading-relaxed text-foreground/80">{legend.content}</p>
+                          {legend.source && <p className="text-xs text-muted-foreground mt-3">Source: {legend.source}</p>}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="species">
+          {species?.length === 0 ? (
+            <p className="text-muted-foreground text-center py-10">No species documented yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {species?.map((s) => (
+                <Card key={s.id} data-testid={`card-species-${s.id}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <CardTitle className="font-serif text-base">{s.commonName}</CardTitle>
+                        <p className="text-xs italic text-muted-foreground">{s.scientificName}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 text-xs rounded-full shrink-0 ${speciesStatusColor[s.conservationStatus] ?? "bg-gray-100 text-gray-800"}`}>
+                        {s.conservationStatus}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-foreground/70 leading-relaxed mb-2">{s.description}</p>
+                    {s.medicinalUses && <p className="text-xs text-muted-foreground"><span className="font-medium">Medicinal:</span> {s.medicinalUses}</p>}
+                    {s.culturalSignificance && <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Cultural:</span> {s.culturalSignificance}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="alerts">
+          {alerts?.length === 0 ? (
+            <div className="text-center py-10">
+              <ShieldCheck className="h-10 w-10 mx-auto mb-3 text-green-500" />
+              <p className="text-muted-foreground">No alerts for this grove.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {alerts?.map((alert) => (
+                <Card key={alert.id} data-testid={`card-alert-${alert.id}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <CardTitle className="text-base capitalize">{alert.alertType.replace(/_/g, " ")}</CardTitle>
+                      <span className={`px-2.5 py-0.5 text-xs rounded-full capitalize ${alertStatusColor[alert.status] ?? "bg-gray-100 text-gray-800"}`}>
+                        {alert.status}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-foreground/80">{alert.description}</p>
+                    {alert.location && <p className="text-xs text-muted-foreground mt-2">Location: {alert.location}</p>}
+                    {alert.reportedBy && <p className="text-xs text-muted-foreground">Reported by: {alert.reportedBy}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/groves.tsx
+----------------------------------------------------------------
+import { useState } from "react";
+import { Link } from "wouter";
+import { TreePine, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
+import { useListGroves } from "@workspace/api-client-react";
+import { Input } from "@/components/ui/input";
+
+const GROVE_TYPES = ["Kaavu", "Bana", "Devarakadu", "Oran", "Sarna"];
+const STATES = ["Kerala", "Karnataka", "Rajasthan", "Jharkhand", "Tamil Nadu", "Maharashtra"];
+
+const statusColor: Record<string, string> = {
+  "Well-preserved": "bg-emerald-100 text-emerald-800",
+  "Threatened": "bg-amber-100 text-amber-800",
+  "Critical": "bg-red-100 text-red-800",
+};
+
+export default function Groves() {
+  const [search, setSearch] = useState("");
+  const [groveType, setGroveType] = useState("");
+  const [state, setState] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  const { data: groves, isLoading } = useListGroves({
+    search: search || undefined,
+    groveType: groveType || undefined,
+    state: state || undefined,
+  });
+
+  const hasFilters = groveType || state;
+
+  return (
+    <div className="flex flex-col">
+      <div className="px-4 pt-5 pb-3">
+        <h1 className="text-xl font-serif font-bold text-foreground">Groves Directory</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">Sacred forest sanctuaries across India</p>
+      </div>
+
+      <div className="px-4 pb-3 flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            data-testid="input-grove-search"
+            placeholder="Search groves…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-9 text-sm bg-muted border-0"
+          />
+        </div>
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 h-9 rounded-lg text-sm font-medium transition-colors ${
+            showFilters || hasFilters
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Filter
+          {hasFilters && <span className="w-1.5 h-1.5 rounded-full bg-white inline-block" />}
+        </button>
+      </div>
+
+      {showFilters && (
+        <div className="px-4 pb-3 space-y-2">
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Type</p>
+            <div className="flex gap-2 flex-wrap">
+              {GROVE_TYPES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setGroveType(groveType === t ? "" : t)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    groveType === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">State</p>
+            <div className="flex gap-2 flex-wrap">
+              {STATES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setState(state === s ? "" : s)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    state === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          {hasFilters && (
+            <button onClick={() => { setGroveType(""); setState(""); }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <X className="h-3 w-3" /> Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="px-4">
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-2xl overflow-hidden bg-muted animate-pulse h-52" />
+            ))}
+          </div>
+        ) : groves?.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground">
+            <TreePine className="h-10 w-10 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No groves found.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {groves?.map((grove) => (
+              <Link
+                key={grove.id}
+                href={`/groves/${grove.id}`}
+                data-testid={`card-grove-${grove.id}`}
+                className="rounded-2xl overflow-hidden bg-card border border-border/60 flex flex-col active:scale-[0.97] transition-transform"
+              >
+                <div className="relative h-28 bg-muted overflow-hidden">
+                  {grove.imageUrl ? (
+                    <img src={grove.imageUrl} alt={grove.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <TreePine className="h-10 w-10 text-muted-foreground/20" />
+                    </div>
+                  )}
+                  <div className="absolute bottom-0 inset-x-0 h-10 bg-gradient-to-t from-black/50 to-transparent" />
+                  <div className="absolute top-2 right-2">
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${statusColor[grove.conservationStatus] ?? "bg-gray-100 text-gray-700"}`}>
+                      {grove.conservationStatus}
+                    </span>
+                  </div>
+                  <div className="absolute bottom-2 left-2">
+                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-black/40 text-white backdrop-blur-sm">
+                      {grove.groveType}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-3 flex-1">
+                  <p className="text-sm font-serif font-semibold text-foreground leading-tight line-clamp-1">{grove.name}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-0.5">
+                    <MapPin className="h-2.5 w-2.5 shrink-0" />{grove.district}, {grove.state}
+                  </p>
+                  <p className="text-[10px] text-foreground/60 mt-1.5 line-clamp-2 leading-relaxed">{grove.description}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/home.tsx
+----------------------------------------------------------------
+import { Link } from "wouter";
+import { TreePine, AlertTriangle, ShieldCheck, MapPin, Plus, ChevronRight, Bell } from "lucide-react";
+import { useGetGrovesSummary, useGetAlertStats, useListGroves, useListAlerts } from "@workspace/api-client-react";
+import { useAuth } from "@/context/auth";
+
+const statusColor: Record<string, string> = {
+  "Well-preserved": "bg-emerald-100 text-emerald-800",
+  "Threatened": "bg-amber-100 text-amber-800",
+  "Critical": "bg-red-100 text-red-800",
+};
+
+const alertStatusColor: Record<string, string> = {
+  reported: "bg-red-100 text-red-700",
+  investigating: "bg-amber-100 text-amber-700",
+  resolved: "bg-green-100 text-green-700",
+};
+
+const alertTypeLabels: Record<string, string> = {
+  tree_cutting: "Tree Cutting",
+  waste_dumping: "Waste Dumping",
+  encroachment: "Encroachment",
+  fire: "Fire",
+  other: "Other",
+};
+
+export default function Home() {
+  const { user } = useAuth();
+  const { data: summary, isLoading: isLoadingSummary } = useGetGrovesSummary();
+  const { data: alertStats, isLoading: isLoadingAlerts } = useGetAlertStats();
+  const { data: groves, isLoading: isLoadingGroves } = useListGroves({});
+  const { data: recentAlerts, isLoading: isLoadingRecentAlerts } = useListAlerts({ status: "reported" });
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  };
+
+  return (
+    <div className="flex flex-col">
+      {/* Hero Strip */}
+      <div
+        className="relative px-4 pt-6 pb-8"
+        style={{
+          backgroundImage: "url('https://images.unsplash.com/photo-1448375240586-882707db888b?w=800&q=80')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/50 to-black/70" />
+        <div className="relative z-10">
+          <p className="text-white/70 text-sm mb-0.5">
+            {greeting()}{user ? `, ${user.displayName ?? user.username}` : ""}
+          </p>
+          <h1 className="text-white text-2xl font-serif font-bold mb-5">
+            Sacred Grove Sentinel
+          </h1>
+
+          {/* Stat Pills */}
+          <div className="flex gap-2.5">
+            <div className="flex-1 bg-white/15 backdrop-blur rounded-xl px-3 py-2.5 border border-white/20">
+              <p className="text-white/60 text-[10px] uppercase tracking-wide mb-0.5">Groves</p>
+              {isLoadingSummary ? (
+                <div className="h-6 w-8 bg-white/20 rounded animate-pulse" />
+              ) : (
+                <p className="text-white text-xl font-bold leading-none">{summary?.total ?? 0}</p>
+              )}
+            </div>
+            <div className="flex-1 bg-white/15 backdrop-blur rounded-xl px-3 py-2.5 border border-white/20">
+              <p className="text-white/60 text-[10px] uppercase tracking-wide mb-0.5">Alerts</p>
+              {isLoadingAlerts ? (
+                <div className="h-6 w-8 bg-white/20 rounded animate-pulse" />
+              ) : (
+                <p className="text-white text-xl font-bold leading-none">{alertStats?.reported ?? 0}</p>
+              )}
+            </div>
+            <div className="flex-1 bg-white/15 backdrop-blur rounded-xl px-3 py-2.5 border border-white/20">
+              <p className="text-white/60 text-[10px] uppercase tracking-wide mb-0.5">Safe</p>
+              {isLoadingSummary ? (
+                <div className="h-6 w-8 bg-white/20 rounded animate-pulse" />
+              ) : (
+                <p className="text-white text-xl font-bold leading-none">
+                  {summary?.byStatus.find(s => s.conservationStatus === "Well-preserved")?.count ?? 0}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-6 px-4 pt-5">
+        {/* Quick Actions */}
+        <section>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <Link href="/alerts/new" className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-xl px-4 py-3.5 hover:bg-red-100 transition-colors active:scale-95">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Plus className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-red-900">Report Alert</p>
+                <p className="text-xs text-red-600">Flag a threat</p>
+              </div>
+            </Link>
+            <Link href="/species" className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3.5 hover:bg-emerald-100 transition-colors active:scale-95">
+              <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                <TreePine className="h-5 w-5 text-emerald-700" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">Species</p>
+                <p className="text-xs text-emerald-600">Browse flora & fauna</p>
+              </div>
+            </Link>
+          </div>
+        </section>
+
+        {/* Sanctuaries Horizontal Scroll */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sanctuaries</h2>
+            <Link href="/groves" className="flex items-center gap-0.5 text-xs text-primary font-medium">
+              View all <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none">
+            {isLoadingGroves
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="shrink-0 w-40 h-52 bg-muted rounded-2xl animate-pulse" />
+                ))
+              : groves?.map((grove) => (
+                  <Link
+                    key={grove.id}
+                    href={`/groves/${grove.id}`}
+                    className="shrink-0 w-40 rounded-2xl overflow-hidden bg-card border border-border/60 flex flex-col active:scale-95 transition-transform"
+                  >
+                    <div className="relative h-24 bg-muted overflow-hidden">
+                      {grove.imageUrl ? (
+                        <img src={grove.imageUrl} alt={grove.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <TreePine className="h-8 w-8 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      <div className="absolute top-1.5 right-1.5">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColor[grove.conservationStatus] ?? "bg-gray-100 text-gray-700"}`}>
+                          {grove.conservationStatus}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 flex-1">
+                      <p className="text-xs font-serif font-semibold text-foreground leading-tight line-clamp-1">{grove.name}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-0.5">
+                        <MapPin className="h-2.5 w-2.5" />{grove.district}
+                      </p>
+                      <span className="mt-1.5 inline-block text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{grove.groveType}</span>
+                    </div>
+                  </Link>
+                ))
+            }
+          </div>
+        </section>
+
+        {/* Recent Alerts */}
+        <section className="pb-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Alerts</h2>
+            <Link href="/alerts" className="flex items-center gap-0.5 text-xs text-primary font-medium">
+              View all <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {isLoadingRecentAlerts ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : recentAlerts?.length === 0 ? (
+            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-4">
+              <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" />
+              <p className="text-sm text-emerald-800 font-medium">No active alerts — the groves are safe.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentAlerts?.slice(0, 4).map((alert) => (
+                <Link
+                  key={alert.id}
+                  href="/alerts"
+                  className="flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-3 hover:bg-muted/30 transition-colors active:scale-[0.98]"
+                >
+                  <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {alertTypeLabels[alert.alertType] ?? alert.alertType}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {alert.groveName ?? "Unknown grove"} · {new Date(alert.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${alertStatusColor[alert.status] ?? "bg-gray-100 text-gray-700"}`}>
+                    {alert.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/legends.tsx
+----------------------------------------------------------------
+import { useState } from "react";
+import { BookOpen, ShieldCheck, ScrollText } from "lucide-react";
+import { useListLegends } from "@workspace/api-client-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+export default function Legends() {
+  const [legendType, setLegendType] = useState<string>("");
+
+  const { data: legends, isLoading } = useListLegends({
+    legendType: legendType || undefined,
+  });
+
+  const traditional = legends?.filter((l) => l.legendType === "traditional") ?? [];
+  const scientific = legends?.filter((l) => l.legendType === "scientific") ?? [];
+
+  return (
+    <div className="flex flex-col">
+      <div className="px-4 pt-5 pb-3">
+        <h1 className="text-xl font-serif font-bold text-foreground">Myths &amp; Legends</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">Ancient wisdom and ecological science</p>
+      </div>
+
+      <Tabs defaultValue="all" onValueChange={(v) => setLegendType(v === "all" ? "" : v)} className="flex flex-col flex-1">
+        <TabsList className="mx-4 mb-4 grid grid-cols-3 h-9">
+          <TabsTrigger value="all" data-testid="tab-all-legends" className="text-xs">All</TabsTrigger>
+          <TabsTrigger value="traditional" data-testid="tab-traditional" className="text-xs">Traditional</TabsTrigger>
+          <TabsTrigger value="scientific" data-testid="tab-scientific" className="text-xs">Scientific</TabsTrigger>
+        </TabsList>
+
+        {["all", "traditional", "scientific"].map((tab) => (
+          <TabsContent key={tab} value={tab} className="px-4 space-y-3 mt-0">
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-32 rounded-2xl bg-muted animate-pulse" />
+              ))
+            ) : (() => {
+              const list = tab === "all" ? legends ?? [] : tab === "traditional" ? traditional : scientific;
+              if (list.length === 0) {
+                return (
+                  <div className="text-center py-20 text-muted-foreground">
+                    <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                    <p className="text-sm">No entries found.</p>
+                  </div>
+                );
+              }
+              return list.map((legend) => {
+                const isTraditional = legend.legendType === "traditional";
+                return (
+                  <div
+                    key={legend.id}
+                    data-testid={`card-legend-${legend.id}`}
+                    className={`rounded-2xl p-4 border ${
+                      isTraditional
+                        ? "bg-amber-50/60 border-amber-100"
+                        : "bg-primary/5 border-primary/15"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                        isTraditional ? "bg-amber-200" : "bg-primary/20"
+                      }`}>
+                        {isTraditional
+                          ? <BookOpen className="h-3 w-3 text-amber-700" />
+                          : <ShieldCheck className="h-3 w-3 text-primary" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-serif font-semibold text-foreground leading-snug">{legend.title}</p>
+                        {legend.deity && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Deity: {legend.deity}</p>
+                        )}
+                      </div>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed text-foreground/75 ${isTraditional ? "italic" : ""}`}>
+                      {isTraditional ? `"${legend.content}"` : legend.content}
+                    </p>
+                    {legend.source && (
+                      <p className="text-[10px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
+                        Source: {legend.source}
+                      </p>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/login.tsx
+----------------------------------------------------------------
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { TreePine, Leaf, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/context/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+
+export default function Login() {
+  const [, setLocation] = useLocation();
+  const { login } = useAuth();
+  const { toast } = useToast();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      setError("Please enter both username and password.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    const result = await login(username.trim(), password);
+    setIsLoading(false);
+    if (result.ok) {
+      toast({ title: "Welcome back!", description: "You are now signed in." });
+      setLocation("/");
+    } else {
+      setError(result.error ?? "Invalid credentials. Please try again.");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4"
+      style={{
+        backgroundImage: "url('https://images.unsplash.com/photo-1448375240586-882707db888b?w=1600&q=80')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      <div className="absolute inset-0 bg-black/50" />
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <TreePine className="h-10 w-10 text-emerald-400" />
+            <span className="font-serif font-bold text-3xl text-white tracking-tight">
+              Devara Kaadu
+            </span>
+          </div>
+          <p className="text-emerald-200 text-sm font-medium">Sacred Grove Sentinel</p>
+        </div>
+
+        <Card className="border-0 shadow-2xl bg-card/95 backdrop-blur">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="font-serif text-2xl">Sign In</CardTitle>
+            <CardDescription>
+              Access the grove conservation dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {/* Sample credentials hint */}
+            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <Leaf className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <p className="font-semibold text-emerald-800 dark:text-emerald-300 mb-1">Sample credentials</p>
+                  <p className="text-emerald-700 dark:text-emerald-400">
+                    Username: <code className="font-mono font-bold">admin</code>
+                  </p>
+                  <p className="text-emerald-700 dark:text-emerald-400">
+                    Password: <code className="font-mono font-bold">grove123</code>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="Enter your username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+                  {error}
+                </p>
+              )}
+
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing in…" : "Sign In"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <p className="text-center text-xs text-white/60 mt-6 font-serif italic">
+          Protecting the sacred groves, one leaf at a time.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/not-found.tsx
+----------------------------------------------------------------
+import { Card, CardContent } from "@/components/ui/card";
+import { AlertCircle } from "lucide-react";
+
+export default function NotFound() {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
+      <Card className="w-full max-w-md mx-4">
+        <CardContent className="pt-6">
+          <div className="flex mb-4 gap-2">
+            <AlertCircle className="h-8 w-8 text-red-500" />
+            <h1 className="text-2xl font-bold text-gray-900">404 Page Not Found</h1>
+          </div>
+
+          <p className="mt-4 text-sm text-gray-600">
+            Did you forget to add the page to the router?
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/pages/species.tsx
+----------------------------------------------------------------
+import { useState } from "react";
+import { Leaf, Search } from "lucide-react";
+import { useListSpecies } from "@workspace/api-client-react";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+
+const statusColor: Record<string, string> = {
+  "Endangered": "bg-red-100 text-red-800",
+  "Vulnerable": "bg-amber-100 text-amber-800",
+  "Least Concern": "bg-emerald-100 text-emerald-800",
+};
+
+const STATUS_OPTIONS = ["Endangered", "Vulnerable", "Least Concern"];
+
+export default function Species() {
+  const [search, setSearch] = useState("");
+  const [conservationStatus, setConservationStatus] = useState("");
+
+  const { data: species, isLoading } = useListSpecies({
+    search: search || undefined,
+    conservationStatus: conservationStatus || undefined,
+  });
+
+  return (
+    <div className="flex flex-col">
+      <div className="px-4 pt-5 pb-3">
+        <h1 className="text-xl font-serif font-bold text-foreground">Species Scanner</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">Flora &amp; fauna of India's sacred groves</p>
+      </div>
+
+      {/* Search */}
+      <div className="px-4 pb-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            data-testid="input-species-search"
+            placeholder="Search by name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-9 text-sm bg-muted border-0"
+          />
+        </div>
+      </div>
+
+      {/* Status filter pills */}
+      <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setConservationStatus("")}
+          className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            !conservationStatus ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          All
+        </button>
+        {STATUS_OPTIONS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setConservationStatus(conservationStatus === s ? "" : s)}
+            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              conservationStatus === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div className="px-4 space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-2xl bg-muted animate-pulse" />
+          ))
+        ) : species?.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground">
+            <Leaf className="h-10 w-10 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">No species found.</p>
+          </div>
+        ) : (
+          species?.map((s) => (
+            <div
+              key={s.id}
+              data-testid={`card-species-${s.id}`}
+              className="flex gap-3 bg-card border border-border/60 rounded-2xl overflow-hidden"
+            >
+              {/* Thumbnail */}
+              <div className="w-24 shrink-0 bg-muted relative overflow-hidden">
+                {s.imageUrl ? (
+                  <img src={s.imageUrl} alt={s.commonName} className="w-full h-full object-cover absolute inset-0" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Leaf className="h-8 w-8 text-muted-foreground/20" />
+                  </div>
+                )}
+              </div>
+              {/* Info */}
+              <div className="flex-1 py-3 pr-3 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-serif font-semibold text-foreground leading-tight">{s.commonName}</p>
+                  <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${statusColor[s.conservationStatus] ?? "bg-gray-100 text-gray-700"}`}>
+                    {s.conservationStatus}
+                  </span>
+                </div>
+                <p className="text-[10px] italic text-muted-foreground mt-0.5">{s.scientificName}</p>
+                <p className="text-[11px] text-foreground/60 mt-1.5 line-clamp-2 leading-relaxed">{s.description}</p>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {s.medicinalUses && (
+                    <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded-full">Medicinal</span>
+                  )}
+                  {s.culturalSignificance && (
+                    <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded-full">Cultural</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/components/layout.tsx
+----------------------------------------------------------------
+import { Link, useLocation } from "wouter";
+import { TreePine, AlertTriangle, BookOpen, Leaf, Map, LogIn, LogOut, User, Home } from "lucide-react";
+import { useAuth } from "@/context/auth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const NAV_TABS = [
+  { href: "/", label: "Home", icon: Home, exact: true },
+  { href: "/groves", label: "Groves", icon: Map },
+  { href: "/species", label: "Species", icon: Leaf },
+  { href: "/legends", label: "Legends", icon: BookOpen },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+];
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const { user, isLoading, logout } = useAuth();
+
+  const isActive = (tab: typeof NAV_TABS[0]) =>
+    tab.exact ? location === tab.href : location === tab.href || location.startsWith(tab.href + "/");
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col max-w-2xl mx-auto relative">
+      {/* Top App Bar */}
+      <header className="sticky top-0 z-50 w-full bg-card/90 backdrop-blur border-b border-border/50">
+        <div className="flex h-14 items-center px-4">
+          <Link href="/" className="flex items-center gap-2">
+            <TreePine className="h-5 w-5 text-primary" />
+            <span className="font-serif font-bold text-base tracking-tight text-primary">Devara Kaadu</span>
+          </Link>
+
+          <div className="ml-auto">
+            {!isLoading && (
+              user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors">
+                      <span className="text-sm font-bold text-primary">
+                        {(user.displayName ?? user.username).charAt(0).toUpperCase()}
+                      </span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <div className="px-2 py-1.5">
+                      <p className="text-xs text-muted-foreground">Signed in as</p>
+                      <p className="text-sm font-semibold truncate">{user.displayName ?? user.username}</p>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive gap-2" onClick={logout}>
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Link href="/login" className="flex items-center justify-center w-8 h-8 rounded-full bg-muted hover:bg-muted/80 transition-colors">
+                  <LogIn className="h-4 w-4 text-muted-foreground" />
+                </Link>
+              )
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Page Content */}
+      <main className="flex-1 pb-20">
+        {children}
+      </main>
+
+      {/* Bottom Tab Bar */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50 bg-card/95 backdrop-blur border-t border-border/50">
+        <div className="flex items-stretch h-16">
+          {NAV_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = isActive(tab);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`flex flex-col items-center justify-center flex-1 gap-1 transition-all text-[10px] font-medium ${
+                  active
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className={`flex items-center justify-center w-10 h-6 rounded-full transition-all ${
+                  active ? "bg-primary/10" : ""
+                }`}>
+                  <Icon className={`transition-all ${active ? "h-5 w-5" : "h-4.5 w-4.5"}`} strokeWidth={active ? 2.5 : 2} />
+                </div>
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
+        {/* Safe area spacer for iOS */}
+        <div className="h-safe-bottom" />
+      </nav>
+    </div>
+  );
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/context/auth.tsx
+----------------------------------------------------------------
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  displayName: string | null;
+  role: string;
+}
+
+interface AuthContextValue {
+  user: AuthUser | null;
+  isLoading: boolean;
+  login: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchMe = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+      } else {
+        setUser(null);
+      }
+    } catch {
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
+
+  const login = useCallback(async (username: string, password: string) => {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ username, password }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setUser(data.user);
+      return { ok: true };
+    }
+    const data = await res.json().catch(() => ({ error: "Login failed" }));
+    return { ok: false, error: data.error ?? "Login failed" };
+  }, []);
+
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    setUser(null);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/App.tsx
+----------------------------------------------------------------
+import { Switch, Route, Router as WouterRouter } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import NotFound from "@/pages/not-found";
+import { Layout } from "@/components/layout";
+import { AuthProvider } from "@/context/auth";
+
+import Home from "@/pages/home";
+import Groves from "@/pages/groves";
+import GroveDetail from "@/pages/grove-detail";
+import Species from "@/pages/species";
+import Legends from "@/pages/legends";
+import Alerts from "@/pages/alerts";
+import AlertNew from "@/pages/alert-new";
+import Login from "@/pages/login";
+
+const queryClient = new QueryClient();
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/login" component={Login} />
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/groves" component={Groves} />
+            <Route path="/groves/:id" component={GroveDetail} />
+            <Route path="/species" component={Species} />
+            <Route path="/legends" component={Legends} />
+            <Route path="/alerts" component={Alerts} />
+            <Route path="/alerts/new" component={AlertNew} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <AuthProvider>
+            <Router />
+          </AuthProvider>
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/main.tsx
+----------------------------------------------------------------
+import { createRoot } from "react-dom/client";
+import App from "./App";
+import "./index.css";
+
+createRoot(document.getElementById("root")!).render(<App />);
+
+
+----------------------------------------------------------------
+FILE: artifacts/devara-kaadu/src/index.css
+----------------------------------------------------------------
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+}
+
+/* LIGHT MODE — deep forest green */
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  --opaque-button-border-intensity: -8;
+
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  /* Rich forest palette */
+  --background: 120 18% 95%;       /* pale sage white */
+  --foreground: 150 45% 10%;       /* deep forest night */
+
+  --border: 130 18% 82%;
+  --input: 130 15% 78%;
+  --ring: 142 50% 30%;
+
+  --card: 120 22% 97%;
+  --card-foreground: 150 45% 10%;
+  --card-border: 130 18% 85%;
+
+  --sidebar: 150 45% 10%;
+  --sidebar-foreground: 120 22% 97%;
+  --sidebar-border: 150 40% 8%;
+  --sidebar-primary: 142 50% 30%;
+  --sidebar-primary-foreground: 120 22% 97%;
+  --sidebar-accent: 142 40% 22%;
+  --sidebar-accent-foreground: 120 22% 97%;
+  --sidebar-ring: 36 65% 58%;
+
+  --popover: 120 22% 97%;
+  --popover-foreground: 150 45% 10%;
+  --popover-border: 130 18% 85%;
+
+  --primary: 142 50% 28%;          /* deep emerald */
+  --primary-foreground: 120 22% 97%;
+
+  --secondary: 130 20% 88%;        /* sage mist */
+  --secondary-foreground: 150 45% 10%;
+
+  --muted: 130 18% 88%;
+  --muted-foreground: 150 20% 38%;
+
+  --accent: 36 65% 55%;            /* warm amber/gold — like sunlight through leaves */
+  --accent-foreground: 150 45% 10%;
+
+  --destructive: 0 70% 38%;
+  --destructive-foreground: 120 22% 97%;
+
+  --chart-1: 142 50% 28%;
+  --chart-2: 36 65% 55%;
+  --chart-3: 150 20% 38%;
+  --chart-4: 130 20% 88%;
+  --chart-5: 150 45% 10%;
+
+  --app-font-sans: 'Plus Jakarta Sans', sans-serif;
+  --app-font-serif: 'Fraunces', serif;
+  --app-font-mono: 'Space Mono', monospace;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+  --opaque-button-border-intensity: 9;
+
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 150 40% 7%;        /* forest midnight */
+  --foreground: 120 18% 92%;
+
+  --border: 150 30% 18%;
+  --input: 150 30% 18%;
+  --ring: 142 50% 40%;
+
+  --card: 150 40% 10%;
+  --card-foreground: 120 18% 92%;
+  --card-border: 150 30% 18%;
+
+  --sidebar: 150 40% 7%;
+  --sidebar-foreground: 120 18% 92%;
+  --sidebar-border: 150 30% 18%;
+  --sidebar-primary: 142 50% 40%;
+  --sidebar-primary-foreground: 120 18% 92%;
+  --sidebar-accent: 150 30% 18%;
+  --sidebar-accent-foreground: 120 18% 92%;
+  --sidebar-ring: 36 65% 58%;
+
+  --popover: 150 40% 10%;
+  --popover-foreground: 120 18% 92%;
+  --popover-border: 150 30% 18%;
+
+  --primary: 142 55% 42%;          /* vivid emerald in dark */
+  --primary-foreground: 150 40% 7%;
+
+  --secondary: 150 30% 18%;
+  --secondary-foreground: 120 18% 92%;
+
+  --muted: 150 30% 18%;
+  --muted-foreground: 120 15% 65%;
+
+  --accent: 36 65% 60%;
+  --accent-foreground: 150 40% 7%;
+
+  --destructive: 0 70% 52%;
+  --destructive-foreground: 120 18% 92%;
+
+  --chart-1: 142 55% 42%;
+  --chart-2: 36 65% 60%;
+  --chart-3: 120 15% 65%;
+  --chart-4: 150 30% 18%;
+  --chart-5: 120 18% 92%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight;
+  }
+}
+
+/* Subtle forest texture overlay on hero */
+.hero-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 40, 20, 0.55) 0%,
+    rgba(10, 40, 20, 0.35) 50%,
+    rgba(10, 40, 20, 0.65) 100%
+  );
+}
+
+/* Hover lift for cards */
+.hover-elevate {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-elevate:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(20, 70, 35, 0.15);
+}
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/alerts.ts
+----------------------------------------------------------------
+import { Router, type IRouter } from "express";
+import { eq, sql } from "drizzle-orm";
+import { db, alertsTable } from "@workspace/db";
+import {
+  ListAlertsQueryParams,
+  CreateAlertBody,
+  GetAlertParams,
+  GetAlertResponse,
+  UpdateAlertParams,
+  UpdateAlertBody,
+  ListGroveAlertsParams,
+  ListGroveAlertsResponse,
+  ListAlertsResponse,
+  GetAlertStatsResponse,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+router.get("/alerts/stats", async (_req, res): Promise<void> => {
+  const [total, byStatus, byType] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(alertsTable),
+    db
+      .select({ status: alertsTable.status, count: sql<number>`count(*)::int` })
+      .from(alertsTable)
+      .groupBy(alertsTable.status),
+    db
+      .select({ alertType: alertsTable.alertType, count: sql<number>`count(*)::int` })
+      .from(alertsTable)
+      .groupBy(alertsTable.alertType),
+  ]);
+
+  const statusMap = Object.fromEntries(byStatus.map((s) => [s.status, s.count]));
+  res.json(
+    GetAlertStatsResponse.parse({
+      total: total[0]?.count ?? 0,
+      reported: statusMap["reported"] ?? 0,
+      investigating: statusMap["investigating"] ?? 0,
+      resolved: statusMap["resolved"] ?? 0,
+      byType,
+    }),
+  );
+});
+
+router.get("/groves/:groveId/alerts", async (req, res): Promise<void> => {
+  const params = ListGroveAlertsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const alerts = await db
+    .select()
+    .from(alertsTable)
+    .where(eq(alertsTable.groveId, params.data.groveId))
+    .orderBy(alertsTable.createdAt);
+  res.json(ListGroveAlertsResponse.parse(alerts));
+});
+
+router.get("/alerts", async (req, res): Promise<void> => {
+  const params = ListAlertsQueryParams.safeParse(req.query);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  let query = db.select().from(alertsTable).$dynamic();
+  const conditions = [];
+  if (params.data.status) {
+    conditions.push(eq(alertsTable.status, params.data.status));
+  }
+  if (params.data.alertType) {
+    conditions.push(eq(alertsTable.alertType, params.data.alertType));
+  }
+  if (conditions.length > 0) {
+    const { and } = await import("drizzle-orm");
+    query = query.where(and(...conditions));
+  }
+  const alerts = await query.orderBy(alertsTable.createdAt);
+  res.json(ListAlertsResponse.parse(alerts));
+});
+
+router.post("/alerts", async (req, res): Promise<void> => {
+  const parsed = CreateAlertBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [alert] = await db
+    .insert(alertsTable)
+    .values({ ...parsed.data, status: "reported" })
+    .returning();
+  res.status(201).json(GetAlertResponse.parse(alert));
+});
+
+router.get("/alerts/:id", async (req, res): Promise<void> => {
+  const params = GetAlertParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [alert] = await db.select().from(alertsTable).where(eq(alertsTable.id, params.data.id));
+  if (!alert) {
+    res.status(404).json({ error: "Alert not found" });
+    return;
+  }
+  res.json(GetAlertResponse.parse(alert));
+});
+
+router.patch("/alerts/:id", async (req, res): Promise<void> => {
+  const params = UpdateAlertParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = UpdateAlertBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [alert] = await db
+    .update(alertsTable)
+    .set(parsed.data)
+    .where(eq(alertsTable.id, params.data.id))
+    .returning();
+  if (!alert) {
+    res.status(404).json({ error: "Alert not found" });
+    return;
+  }
+  res.json(GetAlertResponse.parse(alert));
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/auth.ts
+----------------------------------------------------------------
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+
+const router = Router();
+
+router.get("/auth/me", (req, res) => {
+  if (!req.session.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  res.json({
+    user: {
+      id: req.session.userId,
+      username: req.session.username,
+      displayName: req.session.displayName ?? null,
+      role: req.session.role,
+    },
+  });
+});
+
+router.post("/auth/login", async (req, res) => {
+  const { username, password } = req.body as { username?: string; password?: string };
+
+  if (!username || !password) {
+    res.status(400).json({ error: "Username and password are required" });
+    return;
+  }
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.username, username.trim().toLowerCase()))
+    .limit(1);
+
+  if (!user) {
+    res.status(401).json({ error: "Invalid username or password" });
+    return;
+  }
+
+  const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+  if (!passwordMatch) {
+    res.status(401).json({ error: "Invalid username or password" });
+    return;
+  }
+
+  req.session.userId = user.id;
+  req.session.username = user.username;
+  req.session.displayName = user.displayName ?? undefined;
+  req.session.role = user.role;
+
+  res.json({
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+    },
+  });
+});
+
+router.post("/auth/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie("sid");
+    res.json({ ok: true });
+  });
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/groves.ts
+----------------------------------------------------------------
+import { Router, type IRouter } from "express";
+import { eq, ilike, or, sql } from "drizzle-orm";
+import { db, grovesTable } from "@workspace/db";
+import {
+  ListGrovesQueryParams,
+  CreateGroveBody,
+  GetGroveParams,
+  GetGroveResponse,
+  UpdateGroveParams,
+  UpdateGroveBody,
+  DeleteGroveParams,
+  ListGrovesResponse,
+  UpdateGroveResponse,
+  GetGrovesSummaryResponse,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+router.get("/groves/summary", async (_req, res): Promise<void> => {
+  const [total, byType, byState, byStatus] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(grovesTable),
+    db
+      .select({ groveType: grovesTable.groveType, count: sql<number>`count(*)::int` })
+      .from(grovesTable)
+      .groupBy(grovesTable.groveType),
+    db
+      .select({ state: grovesTable.state, count: sql<number>`count(*)::int` })
+      .from(grovesTable)
+      .groupBy(grovesTable.state),
+    db
+      .select({ conservationStatus: grovesTable.conservationStatus, count: sql<number>`count(*)::int` })
+      .from(grovesTable)
+      .groupBy(grovesTable.conservationStatus),
+  ]);
+  res.json(
+    GetGrovesSummaryResponse.parse({
+      total: total[0]?.count ?? 0,
+      byType,
+      byState,
+      byStatus,
+    }),
+  );
+});
+
+router.get("/groves", async (req, res): Promise<void> => {
+  const params = ListGrovesQueryParams.safeParse(req.query);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const { search, groveType, state } = params.data;
+  let query = db.select().from(grovesTable).$dynamic();
+  const conditions = [];
+  if (search) {
+    conditions.push(
+      or(
+        ilike(grovesTable.name, `%${search}%`),
+        ilike(grovesTable.district, `%${search}%`),
+        ilike(grovesTable.deity ?? sql`''`, `%${search}%`),
+      ),
+    );
+  }
+  if (groveType) {
+    conditions.push(eq(grovesTable.groveType, groveType));
+  }
+  if (state) {
+    conditions.push(eq(grovesTable.state, state));
+  }
+  if (conditions.length > 0) {
+    query = query.where(or(...conditions));
+  }
+  const groves = await query.orderBy(grovesTable.createdAt);
+  res.json(ListGrovesResponse.parse(groves));
+});
+
+router.post("/groves", async (req, res): Promise<void> => {
+  const parsed = CreateGroveBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [grove] = await db.insert(grovesTable).values(parsed.data).returning();
+  res.status(201).json(GetGroveResponse.parse(grove));
+});
+
+router.get("/groves/:id", async (req, res): Promise<void> => {
+  const params = GetGroveParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [grove] = await db.select().from(grovesTable).where(eq(grovesTable.id, params.data.id));
+  if (!grove) {
+    res.status(404).json({ error: "Grove not found" });
+    return;
+  }
+  res.json(GetGroveResponse.parse(grove));
+});
+
+router.patch("/groves/:id", async (req, res): Promise<void> => {
+  const params = UpdateGroveParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = UpdateGroveBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [grove] = await db
+    .update(grovesTable)
+    .set(parsed.data)
+    .where(eq(grovesTable.id, params.data.id))
+    .returning();
+  if (!grove) {
+    res.status(404).json({ error: "Grove not found" });
+    return;
+  }
+  res.json(UpdateGroveResponse.parse(grove));
+});
+
+router.delete("/groves/:id", async (req, res): Promise<void> => {
+  const params = DeleteGroveParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [grove] = await db.delete(grovesTable).where(eq(grovesTable.id, params.data.id)).returning();
+  if (!grove) {
+    res.status(404).json({ error: "Grove not found" });
+    return;
+  }
+  res.sendStatus(204);
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/health.ts
+----------------------------------------------------------------
+import { Router, type IRouter } from "express";
+import { HealthCheckResponse } from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+router.get("/healthz", (_req, res) => {
+  const data = HealthCheckResponse.parse({ status: "ok" });
+  res.json(data);
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/index.ts
+----------------------------------------------------------------
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import grovesRouter from "./groves";
+import speciesRouter from "./species";
+import legendsRouter from "./legends";
+import alertsRouter from "./alerts";
+import storageRouter from "./storage";
+import authRouter from "./auth";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use(authRouter);
+router.use(storageRouter);
+router.use(grovesRouter);
+router.use(speciesRouter);
+router.use(legendsRouter);
+router.use(alertsRouter);
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/legends.ts
+----------------------------------------------------------------
+import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
+import { db, legendsTable } from "@workspace/db";
+import {
+  ListLegendsQueryParams,
+  CreateLegendBody,
+  ListGroveLegendsParams,
+  ListGroveLegendsResponse,
+  ListLegendsResponse,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+router.get("/groves/:groveId/legends", async (req, res): Promise<void> => {
+  const params = ListGroveLegendsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const legends = await db
+    .select()
+    .from(legendsTable)
+    .where(eq(legendsTable.groveId, params.data.groveId))
+    .orderBy(legendsTable.createdAt);
+  res.json(ListGroveLegendsResponse.parse(legends));
+});
+
+router.get("/legends", async (req, res): Promise<void> => {
+  const params = ListLegendsQueryParams.safeParse(req.query);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  let query = db.select().from(legendsTable).$dynamic();
+  if (params.data.legendType) {
+    query = query.where(eq(legendsTable.legendType, params.data.legendType));
+  }
+  const legends = await query.orderBy(legendsTable.createdAt);
+  res.json(ListLegendsResponse.parse(legends));
+});
+
+router.post("/legends", async (req, res): Promise<void> => {
+  const parsed = CreateLegendBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [legend] = await db.insert(legendsTable).values(parsed.data).returning();
+  res.status(201).json(legend);
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/species.ts
+----------------------------------------------------------------
+import { Router, type IRouter } from "express";
+import { eq, ilike, or } from "drizzle-orm";
+import { db, speciesTable } from "@workspace/db";
+import {
+  ListSpeciesQueryParams,
+  CreateSpeciesBody,
+  GetSpeciesParams,
+  GetSpeciesResponse,
+  ListGroveSpeciesParams,
+  ListGroveSpeciesResponse,
+  ListSpeciesResponse,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+router.get("/groves/:groveId/species", async (req, res): Promise<void> => {
+  const params = ListGroveSpeciesParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const species = await db
+    .select()
+    .from(speciesTable)
+    .where(eq(speciesTable.groveId, params.data.groveId));
+  res.json(ListGroveSpeciesResponse.parse(species));
+});
+
+router.get("/species", async (req, res): Promise<void> => {
+  const params = ListSpeciesQueryParams.safeParse(req.query);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const { search, conservationStatus } = params.data;
+  let query = db.select().from(speciesTable).$dynamic();
+  const conditions = [];
+  if (search) {
+    conditions.push(
+      or(
+        ilike(speciesTable.commonName, `%${search}%`),
+        ilike(speciesTable.scientificName, `%${search}%`),
+      ),
+    );
+  }
+  if (conservationStatus) {
+    conditions.push(eq(speciesTable.conservationStatus, conservationStatus));
+  }
+  if (conditions.length > 0) {
+    query = query.where(or(...conditions));
+  }
+  const species = await query.orderBy(speciesTable.createdAt);
+  res.json(ListSpeciesResponse.parse(species));
+});
+
+router.post("/species", async (req, res): Promise<void> => {
+  const parsed = CreateSpeciesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [species] = await db.insert(speciesTable).values(parsed.data).returning();
+  res.status(201).json(GetSpeciesResponse.parse(species));
+});
+
+router.get("/species/:id", async (req, res): Promise<void> => {
+  const params = GetSpeciesParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [species] = await db.select().from(speciesTable).where(eq(speciesTable.id, params.data.id));
+  if (!species) {
+    res.status(404).json({ error: "Species not found" });
+    return;
+  }
+  res.json(GetSpeciesResponse.parse(species));
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/routes/storage.ts
+----------------------------------------------------------------
+import { Router, type IRouter, type Request, type Response } from "express";
+import { Readable } from "stream";
+import {
+  RequestUploadUrlBody,
+  RequestUploadUrlResponse,
+} from "@workspace/api-zod";
+import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { ObjectPermission } from "../lib/objectAcl";
+
+const router: IRouter = Router();
+const objectStorageService = new ObjectStorageService();
+
+/**
+ * POST /storage/uploads/request-url
+ *
+ * Request a presigned URL for file upload.
+ * The client sends JSON metadata (name, size, contentType) — NOT the file.
+ * Then uploads the file directly to the returned presigned URL.
+ */
+router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
+  const parsed = RequestUploadUrlBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Missing or invalid required fields" });
+    return;
+  }
+
+  try {
+    const { name, size, contentType } = parsed.data;
+
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+    res.json(
+      RequestUploadUrlResponse.parse({
+        uploadURL,
+        objectPath,
+        metadata: { name, size, contentType },
+      }),
+    );
+  } catch (error) {
+    req.log.error({ err: error }, "Error generating upload URL");
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+/**
+ * GET /storage/public-objects/*
+ *
+ * Serve public assets from PUBLIC_OBJECT_SEARCH_PATHS.
+ * These are unconditionally public — no authentication or ACL checks.
+ * IMPORTANT: Always provide this endpoint when object storage is set up.
+ */
+router.get("/storage/public-objects/*filePath", async (req: Request, res: Response) => {
+  try {
+    const raw = req.params.filePath;
+    const filePath = Array.isArray(raw) ? raw.join("/") : raw;
+    const file = await objectStorageService.searchPublicObject(filePath);
+    if (!file) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+
+    const response = await objectStorageService.downloadObject(file);
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    req.log.error({ err: error }, "Error serving public object");
+    res.status(500).json({ error: "Failed to serve public object" });
+  }
+});
+
+/**
+ * GET /storage/objects/*
+ *
+ * Serve object entities from PRIVATE_OBJECT_DIR.
+ * These are served from a separate path from /public-objects and can optionally
+ * be protected with authentication or ACL checks based on the use case.
+ */
+router.get("/storage/objects/*path", async (req: Request, res: Response) => {
+  try {
+    const raw = req.params.path;
+    const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
+    const objectPath = `/objects/${wildcardPath}`;
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+
+    // --- Protected route example (uncomment when using replit-auth) ---
+    // if (!req.isAuthenticated()) {
+    //   res.status(401).json({ error: "Unauthorized" });
+    //   return;
+    // }
+    // const canAccess = await objectStorageService.canAccessObjectEntity({
+    //   userId: req.user.id,
+    //   objectFile,
+    //   requestedPermission: ObjectPermission.READ,
+    // });
+    // if (!canAccess) {
+    //   res.status(403).json({ error: "Forbidden" });
+    //   return;
+    // }
+
+    const response = await objectStorageService.downloadObject(objectFile);
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      req.log.warn({ err: error }, "Object not found");
+      res.status(404).json({ error: "Object not found" });
+      return;
+    }
+    req.log.error({ err: error }, "Error serving object");
+    res.status(500).json({ error: "Failed to serve object" });
+  }
+});
+
+export default router;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/app.ts
+----------------------------------------------------------------
+import express, { type Express } from "express";
+import cors from "cors";
+import pinoHttp from "pino-http";
+import session from "express-session";
+import router from "./routes";
+import { logger } from "./lib/logger";
+
+const app: Express = express();
+
+app.use(
+  pinoHttp({
+    logger,
+    serializers: {
+      req(req) {
+        return {
+          id: req.id,
+          method: req.method,
+          url: req.url?.split("?")[0],
+        };
+      },
+      res(res) {
+        return {
+          statusCode: res.statusCode,
+        };
+      },
+    },
+  }),
+);
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET ?? "devara-kaadu-secret",
+    name: "sid",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    },
+  }),
+);
+
+app.use("/api", router);
+
+export default app;
+
+
+----------------------------------------------------------------
+FILE: artifacts/api-server/src/index.ts
+----------------------------------------------------------------
+import app from "./app";
+import { logger } from "./lib/logger";
+
+const rawPort = process.env["PORT"];
+
+if (!rawPort) {
+  throw new Error(
+    "PORT environment variable is required but was not provided.",
+  );
+}
+
+const port = Number(rawPort);
+
+if (Number.isNaN(port) || port <= 0) {
+  throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+app.listen(port, (err) => {
+  if (err) {
+    logger.error({ err }, "Error listening on port");
+    process.exit(1);
+  }
+
+  logger.info({ port }, "Server listening");
+});
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/schema/alerts.ts
+----------------------------------------------------------------
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const alertsTable = pgTable("alerts", {
+  id: serial("id").primaryKey(),
+  groveId: integer("grove_id"),
+  groveName: text("grove_name"),
+  alertType: text("alert_type").notNull(),
+  description: text("description").notNull(),
+  status: text("status").notNull().default("reported"),
+  reportedBy: text("reported_by"),
+  location: text("location"),
+  imageUrl: text("image_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const insertAlertSchema = createInsertSchema(alertsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAlert = z.infer<typeof insertAlertSchema>;
+export type Alert = typeof alertsTable.$inferSelect;
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/schema/groves.ts
+----------------------------------------------------------------
+import { pgTable, text, serial, timestamp, doublePrecision } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const grovesTable = pgTable("groves", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  groveType: text("grove_type").notNull(),
+  state: text("state").notNull(),
+  district: text("district").notNull(),
+  deity: text("deity"),
+  description: text("description").notNull(),
+  area: text("area"),
+  conservationStatus: text("conservation_status").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  imageUrl: text("image_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertGroveSchema = createInsertSchema(grovesTable).omit({ id: true, createdAt: true });
+export type InsertGrove = z.infer<typeof insertGroveSchema>;
+export type Grove = typeof grovesTable.$inferSelect;
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/schema/index.ts
+----------------------------------------------------------------
+export * from "./groves";
+export * from "./species";
+export * from "./legends";
+export * from "./alerts";
+export * from "./users";
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/schema/legends.ts
+----------------------------------------------------------------
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const legendsTable = pgTable("legends", {
+  id: serial("id").primaryKey(),
+  groveId: integer("grove_id").notNull(),
+  title: text("title").notNull(),
+  legendType: text("legend_type").notNull(),
+  content: text("content").notNull(),
+  deity: text("deity"),
+  source: text("source"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertLegendSchema = createInsertSchema(legendsTable).omit({ id: true, createdAt: true });
+export type InsertLegend = z.infer<typeof insertLegendSchema>;
+export type Legend = typeof legendsTable.$inferSelect;
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/schema/species.ts
+----------------------------------------------------------------
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const speciesTable = pgTable("species", {
+  id: serial("id").primaryKey(),
+  groveId: integer("grove_id"),
+  commonName: text("common_name").notNull(),
+  scientificName: text("scientific_name").notNull(),
+  conservationStatus: text("conservation_status").notNull(),
+  description: text("description").notNull(),
+  medicinalUses: text("medicinal_uses"),
+  culturalSignificance: text("cultural_significance"),
+  imageUrl: text("image_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertSpeciesSchema = createInsertSchema(speciesTable).omit({ id: true, createdAt: true });
+export type InsertSpecies = z.infer<typeof insertSpeciesSchema>;
+export type Species = typeof speciesTable.$inferSelect;
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/schema/users.ts
+----------------------------------------------------------------
+import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+
+export const usersTable = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name"),
+  role: text("role").notNull().default("user"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type User = typeof usersTable.$inferSelect;
+
+
+----------------------------------------------------------------
+FILE: lib/db/src/index.ts
+----------------------------------------------------------------
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import * as schema from "./schema";
+
+const { Pool } = pg;
+
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?",
+  );
+}
+
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle(pool, { schema });
+
+export * from "./schema";
+
+
+----------------------------------------------------------------
+FILE: lib/api-spec/openapi.yaml
+----------------------------------------------------------------
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Devara Kaadu - Sacred Grove Sentinel API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: groves
+    description: Sacred grove operations
+  - name: species
+    description: Plant/animal species operations
+  - name: legends
+    description: Myths and legends operations
+  - name: alerts
+    description: Conservation alert operations
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /groves:
+    get:
+      operationId: listGroves
+      tags: [groves]
+      summary: List all sacred groves
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: groveType
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of groves
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Grove"
+    post:
+      operationId: createGrove
+      tags: [groves]
+      summary: Create a new grove
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroveBody"
+      responses:
+        "201":
+          description: Created grove
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Grove"
+
+  /groves/summary:
+    get:
+      operationId: getGrovesSummary
+      tags: [groves]
+      summary: Summary statistics about groves
+      responses:
+        "200":
+          description: Grove statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrovesSummary"
+
+  /groves/{id}:
+    get:
+      operationId: getGrove
+      tags: [groves]
+      summary: Get a grove by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Grove details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Grove"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateGrove
+      tags: [groves]
+      summary: Update a grove
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGroveBody"
+      responses:
+        "200":
+          description: Updated grove
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Grove"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteGrove
+      tags: [groves]
+      summary: Delete a grove
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /groves/{groveId}/species:
+    get:
+      operationId: listGroveSpecies
+      tags: [species]
+      summary: List species found in a grove
+      parameters:
+        - name: groveId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of species
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Species"
+
+  /groves/{groveId}/legends:
+    get:
+      operationId: listGroveLegends
+      tags: [legends]
+      summary: List legends for a grove
+      parameters:
+        - name: groveId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of legends
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Legend"
+
+  /groves/{groveId}/alerts:
+    get:
+      operationId: listGroveAlerts
+      tags: [alerts]
+      summary: List alerts for a specific grove
+      parameters:
+        - name: groveId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  /species:
+    get:
+      operationId: listSpecies
+      tags: [species]
+      summary: List all species
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: conservationStatus
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of species
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Species"
+    post:
+      operationId: createSpecies
+      tags: [species]
+      summary: Add a new species record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpeciesBody"
+      responses:
+        "201":
+          description: Created species
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Species"
+
+  /species/{id}:
+    get:
+      operationId: getSpecies
+      tags: [species]
+      summary: Get a species by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Species details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Species"
+        "404":
+          description: Not found
+
+  /legends:
+    get:
+      operationId: listLegends
+      tags: [legends]
+      summary: List all myths and legends
+      parameters:
+        - name: legendType
+          in: query
+          schema:
+            type: string
+            enum: [traditional, scientific]
+      responses:
+        "200":
+          description: List of legends
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Legend"
+    post:
+      operationId: createLegend
+      tags: [legends]
+      summary: Add a new legend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLegendBody"
+      responses:
+        "201":
+          description: Created legend
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Legend"
+
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List all conservation alerts
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [reported, investigating, resolved]
+        - name: alertType
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+    post:
+      operationId: createAlert
+      tags: [alerts]
+      summary: Report a new conservation alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertBody"
+      responses:
+        "201":
+          description: Created alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /alerts/stats:
+    get:
+      operationId: getAlertStats
+      tags: [alerts]
+      summary: Get alert statistics
+      responses:
+        "200":
+          description: Alert statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertStats"
+
+  /alerts/{id}:
+    get:
+      operationId: getAlert
+      tags: [alerts]
+      summary: Get an alert by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alert details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateAlert
+      tags: [alerts]
+      summary: Update alert status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAlertBody"
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "404":
+          description: Not found
+
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to generate upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an uploaded object
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Grove:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        groveType:
+          type: string
+          description: "e.g. Kaavu, Bana, Devarakadu, Oran, Sarna"
+        state:
+          type: string
+        district:
+          type: string
+        deity:
+          type: ["string", "null"]
+        description:
+          type: string
+        area:
+          type: ["string", "null"]
+        conservationStatus:
+          type: string
+          description: "e.g. Well-preserved, Threatened, Critical"
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - groveType
+        - state
+        - district
+        - description
+        - conservationStatus
+        - createdAt
+
+    CreateGroveBody:
+      type: object
+      properties:
+        name:
+          type: string
+        groveType:
+          type: string
+        state:
+          type: string
+        district:
+          type: string
+        deity:
+          type: ["string", "null"]
+        description:
+          type: string
+        area:
+          type: ["string", "null"]
+        conservationStatus:
+          type: string
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        imageUrl:
+          type: ["string", "null"]
+      required:
+        - name
+        - groveType
+        - state
+        - district
+        - description
+        - conservationStatus
+
+    UpdateGroveBody:
+      type: object
+      properties:
+        name:
+          type: string
+        groveType:
+          type: string
+        state:
+          type: string
+        district:
+          type: string
+        deity:
+          type: ["string", "null"]
+        description:
+          type: string
+        area:
+          type: ["string", "null"]
+        conservationStatus:
+          type: string
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        imageUrl:
+          type: ["string", "null"]
+
+    GrovesSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        byType:
+          type: array
+          items:
+            type: object
+            properties:
+              groveType:
+                type: string
+              count:
+                type: integer
+            required:
+              - groveType
+              - count
+        byState:
+          type: array
+          items:
+            type: object
+            properties:
+              state:
+                type: string
+              count:
+                type: integer
+            required:
+              - state
+              - count
+        byStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              conservationStatus:
+                type: string
+              count:
+                type: integer
+            required:
+              - conservationStatus
+              - count
+      required:
+        - total
+        - byType
+        - byState
+        - byStatus
+
+    Species:
+      type: object
+      properties:
+        id:
+          type: integer
+        groveId:
+          type: ["integer", "null"]
+        commonName:
+          type: string
+        scientificName:
+          type: string
+        conservationStatus:
+          type: string
+          description: "e.g. Endangered, Vulnerable, Least Concern"
+        description:
+          type: string
+        medicinalUses:
+          type: ["string", "null"]
+        culturalSignificance:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - commonName
+        - scientificName
+        - conservationStatus
+        - description
+        - createdAt
+
+    CreateSpeciesBody:
+      type: object
+      properties:
+        groveId:
+          type: ["integer", "null"]
+        commonName:
+          type: string
+        scientificName:
+          type: string
+        conservationStatus:
+          type: string
+        description:
+          type: string
+        medicinalUses:
+          type: ["string", "null"]
+        culturalSignificance:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+      required:
+        - commonName
+        - scientificName
+        - conservationStatus
+        - description
+
+    Legend:
+      type: object
+      properties:
+        id:
+          type: integer
+        groveId:
+          type: integer
+        title:
+          type: string
+        legendType:
+          type: string
+          description: "traditional or scientific"
+        content:
+          type: string
+        deity:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - groveId
+        - title
+        - legendType
+        - content
+        - createdAt
+
+    CreateLegendBody:
+      type: object
+      properties:
+        groveId:
+          type: integer
+        title:
+          type: string
+        legendType:
+          type: string
+        content:
+          type: string
+        deity:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+      required:
+        - groveId
+        - title
+        - legendType
+        - content
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        groveId:
+          type: ["integer", "null"]
+        groveName:
+          type: ["string", "null"]
+        alertType:
+          type: string
+          description: "e.g. tree_cutting, waste_dumping, encroachment, fire, other"
+        description:
+          type: string
+        status:
+          type: string
+          description: "reported, investigating, resolved"
+        reportedBy:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - alertType
+        - description
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateAlertBody:
+      type: object
+      properties:
+        groveId:
+          type: ["integer", "null"]
+        groveName:
+          type: ["string", "null"]
+        alertType:
+          type: string
+        description:
+          type: string
+        reportedBy:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+      required:
+        - alertType
+        - description
+
+    UpdateAlertBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [reported, investigating, resolved]
+        description:
+          type: string
+
+    AlertStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        reported:
+          type: integer
+        investigating:
+          type: integer
+        resolved:
+          type: integer
+        byType:
+          type: array
+          items:
+            type: object
+            properties:
+              alertType:
+                type: string
+              count:
+                type: integer
+            required:
+              - alertType
+              - count
+      required:
+        - total
+        - reported
+        - investigating
+        - resolved
+        - byType
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+        contentType:
+          type: string
+          minLength: 1
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/UploadUrlRequest'
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+
+================================================================
+  END OF FILE
+================================================================
